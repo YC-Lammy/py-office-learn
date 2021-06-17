@@ -13,8 +13,11 @@ from webbrowser import open as webbrowser_open
 from inspect import getfile
 from json import loads as json_loads
 from json import dumps as json_dumps
+from inspect import getfile
+import pyOfficeLearn
 
 def pyofficelearn(screen_width,screen_height):
+    image_path = os.path.join(getfile(pyOfficeLearn).replace('__init__.py',''),'pic','icon')
 
 ############################################################################################################################################################
 ############################## read stuff ##################################################################################################################
@@ -154,21 +157,153 @@ def pyofficelearn(screen_width,screen_height):
 #                                                                              p:::::::p           
 #                                                                              p:::::::p           
 #                                                                              ppppppppp  
-    mainLayout = QVBoxLayout()
-    genesisblock  = QLabel()
+    
+    frameLayout = QVBoxLayout()
+    frameLayout.setAlignment(Qt.AlignTop)
+
+    icon_size = int(screen_height/18)
+
+    mainLayout = QHBoxLayout()
+    ######################## menu bar ##############################################################
+
+    bar = QToolBar()
+    bar.setFixedHeight(int(screen_height/20))
+    frameLayout.addWidget(bar)
+    
+    frameLayout.addLayout(mainLayout)
+
+    bar.addAction('run')
+
+##################### left menu widget ###################################################################################
+
+    def setMenuChecked(index):
+        def setCheckFalse():
+            left_menuButton.setChecked(False)
+            left_codeButton.setChecked(False)
+
+        if index == 0:
+            setCheckFalse()
+            left_menuButton.setChecked(True)
+            left_code_widget.hide()
+            left_menu_mainWidget.show()
+
+        if index == 2:
+            setCheckFalse()
+            left_codeButton.setChecked(True)
+            left_menu_mainWidget.hide()
+            left_code_widget.show()
+
+    left_menu_widget = QWidget()
+    left_menu_widget.setFixedWidth(int(screen_width/5))
+    left_menu_layout = QGridLayout()
+    left_menu_widget.setLayout(left_menu_layout)
+
+    
+    left_menuButton  = QPushButton()
+    left_menuButton.setToolTip('Menu')
+    left_menuButton.setIcon(QIcon(os.path.join(image_path,'menu.png')))
+    left_menuButton.setIconSize(QSize(icon_size,icon_size))
+    left_menuButton.setFlat(True)
+    left_menuButton.setCheckable(True)
+    left_menuButton.setChecked(True)
+    left_menuButton.clicked.connect(lambda:setMenuChecked(0))
+    left_menu_layout.addWidget(left_menuButton,0,0,1,1)
+    
+    left_codeButton = QPushButton()
+    left_codeButton.setToolTip('code template')
+    left_codeButton.setIcon(QIcon(os.path.join(image_path,'code.png')))
+    left_codeButton.setIconSize(QSize(icon_size,icon_size))
+    left_codeButton.setFlat(True)
+    left_codeButton.setCheckable(True)
+    left_codeButton.clicked.connect(lambda:setMenuChecked(2))
+    left_menu_layout.addWidget(left_codeButton,1,0,1,1)
+
+
+    # menu
+
+    left_menu_mainWidget = QWidget()
+    #left_menu_mainWidget.setStyleSheet('background-color:#303030;')
+    left_menu_layout.addWidget(left_menu_mainWidget,0,1,10,6)
+    
+
+    # first menu layou
+    left_menu_mainlayout = QVBoxLayout(left_menu_mainWidget)
+    left_menu_mainlayout.setAlignment(Qt.AlignTop)
+    left_menu_mainWidget.setLayout(left_menu_mainlayout)
+
+    layerLabel = QLabel('Layers')
+    layerLabel.setStyleSheet('font-size:40px;')
+    left_menu_mainlayout.addWidget(layerLabel)
+
+    left_menu_mainlayout.addSpacing(int(screen_height/60))
+
+    EmbeddingLabel = QLabel('Embedding Layer')
+    EmbeddingLabel.setToolTip('Embedding layer: Categorical, text')
+    left_menu_mainlayout.addWidget(EmbeddingLabel)
+
+    DenseLabel = QLabel('Dense Layer')
+    DenseLabel.setToolTip('Dense layer: All scenario')
+    left_menu_mainlayout.addWidget(DenseLabel)
+
+
+
+    mainLayout.addWidget(left_menu_widget)
+
+
+    # code
+
+    left_code_widget = QWidget()
+    left_code_widget.hide()
+    left_menu_layout.addWidget(left_code_widget,0,1,10,6)
+    # code template layout
+    left_code_layout = QVBoxLayout()
+    left_code_layout.setAlignment(Qt.AlignTop)
+    codeLabel = QLabel('Code Template')
+    codeLabel.setStyleSheet('font-size:30px;')
+    left_code_layout.addWidget(codeLabel)
+    left_code_widget.setLayout(left_code_layout)
+
+##################### block scroll area #########################################################################
+
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    areaWidget = QWidget()
+
+    scroll.setWidget(areaWidget)
+
+    areaLayout = QVBoxLayout(areaWidget)
+
+    genesisblock  = QLabel('hello')
     radius = 50.0
+
     genesisblockLayout = QVBoxLayout()
+
     genesisblock.setLayout(genesisblockLayout)
     genesisblock.setStyleSheet('background-color:#303030;')
     shadow = QGraphicsDropShadowEffect()
-    shadow.setBlurRadius(5)
-    genesisblock.setGraphicsEffect(shadow)
+    shadow.setBlurRadius(15)
+    
     genesisblock.setFrameStyle(QFrame.StyledPanel)
     genesisblock.setFrameShadow(QFrame.Sunken)
-    genesisblock.setLineWidth(3)
-    mainLayout.addWidget(QPushButton('hi'))
-    mainLayout.addWidget(genesisblock)
-    return mainLayout
+    genesisblock.setFrameShape(QFrame.StyledPanel)
+    #genesisblock.setLineWidth(20)
+    genesisblock.setGraphicsEffect(shadow)
+    areaLayout.addWidget(genesisblock)
+
+    mainLayout.addWidget(scroll)
+
+########################## right menu widget ######################################################################
+
+    right_menu_widget = QWidget()
+    right_menu_widget.setFixedWidth(int(screen_width/4))
+    right_menu_layout = QGridLayout()
+    right_menu_widget.setLayout(right_menu_layout)
+    mainLayout.addWidget(right_menu_widget)
+
+    return frameLayout
+
+
+
 # EEEEEEEEEEEEEEEEEEEEEE                                                                                  tttt                              
 # E::::::::::::::::::::E                                                                               ttt:::t                              
 # E::::::::::::::::::::E                                                                               t:::::t                              
@@ -256,12 +391,12 @@ for more information, visit https://github.com/YC-Lammy/py-office-learn
     screen_height = screensize.height()
     screen_width = screensize.width()
 
-    mainWidget = QWidget()
-    mainWidget.setLayout(pyofficelearn(screen_width,screen_height)) # spreedsheet returns a layout
-    
+    mainWidget = QWidget() # spreedsheet returns a layout
+    layout = pyofficelearn(screen_width,screen_height)
+    mainWidget.setLayout(layout)
     mainWidget.closeEvent = closeEventHandler # reassign the app's close event
     mainWidget.setWindowState(Qt.WindowMaximized)
-    mainWidget.setWindowTitle('py-office-sheet') # actual title not desided
+    mainWidget.setWindowTitle('py-office-learn') # actual title not desided
     mainWidget.show()
     app.exec_()
 

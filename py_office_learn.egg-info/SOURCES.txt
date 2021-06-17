@@ -8,6 +8,7 @@ pyOfficeLearn/config.json
 pyOfficeLearn/pic/icon/240px-Refresh_icon.png
 pyOfficeLearn/pic/icon/Refresh_icon.png
 pyOfficeLearn/pic/icon/cellResize.png
+pyOfficeLearn/pic/icon/code.png
 pyOfficeLearn/pic/icon/cut_icon.png
 pyOfficeLearn/pic/icon/execute.png
 pyOfficeLearn/pic/icon/exportCSV.png
@@ -15,6 +16,7 @@ pyOfficeLearn/pic/icon/exportPDF.png
 pyOfficeLearn/pic/icon/file.jpeg
 pyOfficeLearn/pic/icon/file.png
 pyOfficeLearn/pic/icon/link_sync.png
+pyOfficeLearn/pic/icon/menu.png
 pyOfficeLearn/pic/icon/newFile.png
 pyOfficeLearn/pic/icon/printer.png
 pyOfficeLearn/pic/icon/py-office-icon_small.png
