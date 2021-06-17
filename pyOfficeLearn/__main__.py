@@ -1,4 +1,4 @@
-import gc, sys, joblib,os
+import gc, sys, joblib,os, typing
 import pyOfficeSheet
 from os import close
 from typing import Any
@@ -157,7 +157,94 @@ def pyofficelearn(screen_width,screen_height):
 #                                                                              p:::::::p           
 #                                                                              p:::::::p           
 #                                                                              ppppppppp  
-    
+    class DraggableLabel(QLabel):
+
+        def mousePressEvent(self, event):
+            if event.button() == Qt.LeftButton:
+                self.drag_start_position = event.pos()
+
+        def mouseMoveEvent(self, event):
+            if not (event.buttons() & Qt.LeftButton):
+                return
+            if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
+                return
+            drag = QDrag(self)
+            mimedata = QMimeData()
+            mimedata.setText(self.text())
+            #mimedata.setImageData(self.pixmap().toImage())
+
+            drag.setMimeData(mimedata)
+            pixmap = QPixmap(self.size())
+            painter = QPainter(pixmap)
+            painter.drawPixmap(self.rect(), self.grab())
+            painter.end()
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(event.pos())
+            drag.exec_(Qt.CopyAction | Qt.MoveAction)
+
+
+    class DropAcceptWidget(QWidget):
+        def __init__(self,layout):
+            super().__init__()
+            self.setAcceptDrops(True)
+            self.setLayout(layout)
+            self.currentLayout = layout
+
+        def dragEnterEvent(self, event: QDragEnterEvent):
+            if event.mimeData().hasText():
+                event.accept()
+            else:
+                event.ignore()
+
+        def dropEvent(self, event: QDropEvent):
+            if event.mimeData().hasText():
+                text = event.mimeData().text()
+                self.currentLayout.addWidget(LayerBlockWidget(text))
+
+
+
+    class LayerBlockWidget(QLabel):
+        def __init__(self,blockType:str):
+            super().__init__()
+            self.setFixedHeight(int(screen_height/10))
+            self.setStyleSheet('background-color:#303030;color:white;')
+            self.layout = QGridLayout()
+            self.layout.setAlignment(Qt.AlignLeft)
+            self.setLayout(self.layout)
+
+            self.blockType = blockType
+            blockLabel = QLabel(blockType)
+            blockLabel.setStyleSheet('font-size:30px;')
+            self.layout.addWidget(blockLabel,0,0,1,2)
+
+            if blockType == 'Embedding Layer':
+                self.imput_dim = QLineEdit()
+                self.output_dim = QLineEdit()
+
+            elif blockType == 'Dropout Layer':
+                self.rate = QDoubleSpinBox()
+                self.rate.setRange(0.00,1.00)
+                self.rate.setSingleStep(0.01)
+                self.rate.setDecimals(2)
+                self.rate.setValue(0.20)
+                self.layout.addWidget(QLabel('rate: '),1,0,1,1)
+                self.layout.addWidget(self.rate,1,1,1,1)
+
+    class ModelCompilerBlock(QLabel):
+        def __init__(self) -> None:
+            super().__init__()
+            self.layout = QGridLayout()
+            self.layout.setAlignment(Qt.AlignLeft)
+
+            self.setLayout(self.layout)
+            self.setStyleSheet('background-color:#303030;')
+            
+            self.setFrameStyle(QFrame.StyledPanel)
+            self.setFrameShadow(QFrame.Sunken)
+            self.setFrameShape(QFrame.StyledPanel)
+            self.setFixedHeight(int(screen_height/6))
+            
+
     frameLayout = QVBoxLayout()
     frameLayout.setAlignment(Qt.AlignTop)
 
@@ -237,14 +324,19 @@ def pyofficelearn(screen_width,screen_height):
 
     left_menu_mainlayout.addSpacing(int(screen_height/60))
 
-    EmbeddingLabel = QLabel('Embedding Layer')
-    EmbeddingLabel.setToolTip('Embedding layer: Categorical, text')
-    left_menu_mainlayout.addWidget(EmbeddingLabel)
+    layers = {'Input':'Input is used to instantiate a Keras tensor.'
+    ,'Embedding Layer':'Embedding layer: Categorical, text'
+    ,'Dense Layer':'Dense layer: All scenario'
+    ,'Dropout Layer':'Dropout layer: prevent over fitting'
+    ,'LSTM Layer':'LSTM layer: text, time series'
+    ,'Activation Layer': 'Applies an activation function to an output.'
+    ,'Masking Layer': 'Masks a sequence by using a mask value to skip timesteps.'
+    }
 
-    DenseLabel = QLabel('Dense Layer')
-    DenseLabel.setToolTip('Dense layer: All scenario')
-    left_menu_mainlayout.addWidget(DenseLabel)
-
+    for x,y in layers.items():
+        label = DraggableLabel(x)
+        label.setToolTip(y)
+        left_menu_mainlayout.addWidget(label)
 
 
     mainLayout.addWidget(left_menu_widget)
@@ -267,27 +359,19 @@ def pyofficelearn(screen_width,screen_height):
 
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
-    areaWidget = QWidget()
+    vsb = scroll.verticalScrollBar()
+    vsb.rangeChanged.connect(lambda:vsb.setValue(vsb.maximum()))
+
+    areaLayout = QVBoxLayout()
+    areaLayout.setAlignment(Qt.AlignTop)
+
+    areaWidget = DropAcceptWidget(areaLayout)
 
     scroll.setWidget(areaWidget)
 
-    areaLayout = QVBoxLayout(areaWidget)
 
-    genesisblock  = QLabel('hello')
-    radius = 50.0
+    genesisblock  = ModelCompilerBlock()
 
-    genesisblockLayout = QVBoxLayout()
-
-    genesisblock.setLayout(genesisblockLayout)
-    genesisblock.setStyleSheet('background-color:#303030;')
-    shadow = QGraphicsDropShadowEffect()
-    shadow.setBlurRadius(15)
-    
-    genesisblock.setFrameStyle(QFrame.StyledPanel)
-    genesisblock.setFrameShadow(QFrame.Sunken)
-    genesisblock.setFrameShape(QFrame.StyledPanel)
-    #genesisblock.setLineWidth(20)
-    genesisblock.setGraphicsEffect(shadow)
     areaLayout.addWidget(genesisblock)
 
     mainLayout.addWidget(scroll)
@@ -323,7 +407,7 @@ def pyofficelearn(screen_width,screen_height):
             
 def main():
     print('in construction')
-    global plt_setting, saved_file, current_file_name, settings, mainWidget, prjdict
+    global plt_setting, saved_file, current_file_name, settings, mainWidget, prjdict, layers
 
 ######################### handle sys argvs ###########################################################################################################
 
@@ -333,7 +417,6 @@ def main():
         print("""Usage: py-office-learn [<option>...]
 py-office-learn cross-platform spreadsheet based on keras and numpy for easy machine learning\n
 for more information, visit https://github.com/YC-Lammy/py-office-learn
-
         """)
         return 0
 
@@ -368,6 +451,7 @@ for more information, visit https://github.com/YC-Lammy/py-office-learn
     plt_setting = {'set':False}
     settings = {}
     prjdict = {}
+    layers = []
 
 
     def closeEventHandler(event): # this function is called when user tries to close app, line 559
