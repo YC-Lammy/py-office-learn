@@ -13,8 +13,11 @@ from webbrowser import open as webbrowser_open
 from inspect import getfile
 from json import loads as json_loads
 from json import dumps as json_dumps
+from inspect import getfile
+import pyOfficeLearn
 
 def pyofficelearn(screen_width,screen_height):
+    image_path = os.path.join(getfile(pyOfficeLearn).replace('__init__.py',''),'pic','icon')
 
 ############################################################################################################################################################
 ############################## read stuff ##################################################################################################################
@@ -154,7 +157,40 @@ def pyofficelearn(screen_width,screen_height):
 #                                                                              p:::::::p           
 #                                                                              p:::::::p           
 #                                                                              ppppppppp  
-    mainLayout = QVBoxLayout()
+    
+    mainLayout = QHBoxLayout()
+
+    icon_size = int(screen_height/18)
+
+##################### left menu widget ###################################################################################
+
+    left_menu_widget = QWidget()
+    left_menu_widget.setFixedWidth(int(screen_width/5))
+    left_menu_layout = QGridLayout()
+    left_menu_widget.setLayout(left_menu_layout)
+
+    
+    left_menuButton  = QPushButton()
+    left_menuButton.setToolTip('Menu')
+    left_menuButton.setIcon(QIcon(os.path.join(image_path,'menu.png')))
+    left_menuButton.setIconSize(QSize(icon_size,icon_size))
+    left_menuButton.setFlat(True)
+    left_menu_layout.addWidget(left_menuButton,0,0,1,1)
+    
+    left_codeButton = QPushButton()
+    left_codeButton.setToolTip('code template')
+    left_codeButton.setIcon(QIcon(os.path.join(image_path,'code.png')))
+    left_codeButton.setIconSize(QSize(icon_size,icon_size))
+    left_codeButton.setFlat(True)
+    left_menu_layout.addWidget(left_codeButton,1,0,1,1)
+
+    left_menu_mainWidget = QWidget()
+    left_menu_mainWidget.setStyleSheet('background-color:#303030;')
+    left_menu_layout.addWidget(left_menu_mainWidget,0,1,10,6)
+    mainLayout.addWidget(left_menu_widget)
+
+##################### block scroll are #########################################################################
+
     genesisblock  = QLabel('hello')
     radius = 50.0
     genesisblockLayout = QVBoxLayout()
@@ -162,14 +198,26 @@ def pyofficelearn(screen_width,screen_height):
     genesisblock.setStyleSheet('background-color:#303030;')
     shadow = QGraphicsDropShadowEffect()
     shadow.setBlurRadius(15)
-    genesisblock.setGraphicsEffect(shadow)
-    #genesisblock.setFrameStyle(QFrame.StyledPanel)
-    #genesisblock.setFrameShadow(QFrame.Sunken)
-    #genesisblock.setFrameShape(QFrame.StyledPanel)
+    
+    genesisblock.setFrameStyle(QFrame.StyledPanel)
+    genesisblock.setFrameShadow(QFrame.Sunken)
+    genesisblock.setFrameShape(QFrame.StyledPanel)
     #genesisblock.setLineWidth(20)
-    mainLayout.addWidget(QPushButton('hi'))
+    genesisblock.setGraphicsEffect(shadow)
     mainLayout.addWidget(genesisblock)
+
+########################## right menu widget ######################################################################
+
+    right_menu_widget = QWidget()
+    right_menu_widget.setFixedWidth(int(screen_width/4))
+    right_menu_layout = QGridLayout()
+    right_menu_widget.setLayout(right_menu_layout)
+    mainLayout.addWidget(right_menu_widget)
+
     return mainLayout
+
+
+
 # EEEEEEEEEEEEEEEEEEEEEE                                                                                  tttt                              
 # E::::::::::::::::::::E                                                                               ttt:::t                              
 # E::::::::::::::::::::E                                                                               t:::::t                              
