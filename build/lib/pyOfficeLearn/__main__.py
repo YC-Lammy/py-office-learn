@@ -1,7 +1,9 @@
-import gc, sys, joblib,os
+import gc, sys, joblib,os, traceback
+from logging import raiseExceptions
 import pyOfficeSheet
 from os import close
 from typing import Any
+from time import sleep
 
 from PySide2.QtWidgets import *
 from PySide2.QtCore import *
@@ -56,6 +58,17 @@ def pyofficelearn(screen_width,screen_height):
         if widget !=None:
             widget.setText(filename)
 
+    def loadKerasModel():
+        global model
+        filename, filter = QFileDialog.getExistingDirectory(None,'Load Keras Model')
+
+        from keras.models import load_model
+
+        model = load_model(filename)
+
+
+
+
 ############################################################################################################################################################
 ############################# save stuff ###################################################################################################################
 ############################################################################################################################################################
@@ -87,6 +100,12 @@ def pyofficelearn(screen_width,screen_height):
         elif current_file_name !=None:
             directory= current_file_name
 
+    def saveKerasModel():
+        filename,filter = QFileDialog.getSaveFileName(None,'Save Model')
+
+        from keras.models import save_model
+        save_model(model,filename)
+
         
 ############################################################################################################################################################
 ################################# operational functions ##########################################################################################################
@@ -109,27 +128,150 @@ def pyofficelearn(screen_width,screen_height):
 #  f:::::::f              uu::::::::uu:::un::::n    n::::n  cc:::::::::::::::c        tt:::::::::::tti::::::i oo:::::::::::oo   n::::n    n::::n s:::::::::::ss  
 #  fffffffff                uuuuuuuu  uuuunnnnnn    nnnnnn    cccccccccccccccc          ttttttttttt  iiiiiiii   ooooooooooo     nnnnnn    nnnnnn  sssssssssss    
         
+    def alertbox(err): # a function to alert user when error occourse
+            alert = QMessageBox()
+            alert.setWindowTitle('ERROR')
+            alert.setWindowIcon(alert.style().standardIcon(alert.style().SP_MessageBoxCritical))
+            alert.setText(str(err))
+            alert.setAttribute(Qt.WA_DeleteOnClose) # prevent memory leak
+            alert.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            alert.exec_()
 
     class StdoutRedirector:
-        '''A class for redirecting stdout to this Text widget.'''
-        def __init__(self,text):
-            self.text = text
+        '''A class for redirecting stdout to the Text widget.'''
+        def __init__(self,widget):
+            self.widget = widget
         def write(self,str):
-            self.text.setText(self.text.text()+str)
+            self.widget.setText(self.widget.toPlainText()+str)
 
-    
-    class rounded_corner_Widget(QWidget):
-        def __init__(self, *args, **kwargs):
-            QWidget.__init__(self, *args, **kwargs)
-            self.setWindowOpacity(0.9)
-            #self.setWindowFlags(QtCore.Qt.Popup|QtCore.Qt.FramelessWindowHint)
+    def Build_and_run_keras():
+        try:
+            from ast import literal_eval
+            import threading
 
-            radius = 50.0
-            path = QPainterPath()
-            path.addRoundedRect(QRectF(self.rect()), radius, radius)
-            mask = QRegion(path.toFillPolygon().toPolygon())
-            self.setMask(mask)
-            self.show()
+            class newTextBrowser(QTextBrowser):
+
+                appendSignal = Signal(str) # a signal is required to change text in another thread
+
+                def __init__(self):
+                    super().__init__()
+                    self.appendSignal.connect(lambda x:self.append(str(x)))
+
+                def emitAppend(self,text):
+                    self.appendSignal.emit(str(text))
+
+
+            if keras_model['layers'] == []:
+                        alertbox('No layers found')
+                        return
+
+            for i in keras_model['layers']:
+                if not i.check_submit():   # check if all args is filled
+
+                    alertbox('Not all arguments satisfy, please complete all fields')
+                    raise Exception('arguments not satisfy')
+
+            dialog = QDialog()
+            dialog.setAttribute(Qt.WA_DeleteOnClose)
+            dialog.setGeometry(int(screen_width/6),int(screen_height/6),int(screen_width*2/3),int(screen_height*2/3))
+            layout = QVBoxLayout()
+            dialog.setLayout(layout)
+
+            label = newTextBrowser()
+            label.setStyleSheet('background-color:black;color:white;')
+
+            trainButton = QPushButton('Fit and Train Model')
+            trainButton.setDisabled(True)
+            layout.addWidget(label)
+            layout.addWidget(trainButton)
+
+            def keras_thread():
+                global model
+
+                def print(string):
+                    label.emitAppend(string) # emit signal to change text
+
+                print('Importing Keras from tensorflow...')
+
+                from tensorflow import keras
+
+                from tensorflow.python.client import device_lib
+
+                print(device_lib.list_local_devices())
+
+
+                try:
+                    layers = []
+
+                    classLayers=keras_model.get('layers')
+
+                    print(f'{len(keras_model["layers"])} layers found')
+
+                    if classLayers[0].blockType != 'Input':
+                        print('first block is not Input layer')
+                        print('automatically insert Input layer...')
+                        print('building Input Layer class...')
+                        class inputlayer:
+                            def __init__(self):
+                                self.blockType = 'Input'
+                                self.shape = keras_model['input_shape']
+                            def check_submit(self):
+                                return True
+                        
+                        new_inputLayer = inputlayer()
+                        classLayers.insert(0,new_inputLayer)
+
+                    print('Constructing layers...')
+
+                    for i in classLayers:
+
+                        if i.blockType == 'Input':
+                            layers.append(keras.Input(shape=i.shape))
+
+                    classLayers.remove(new_inputLayer)
+
+                    if keras_model['sequential']:
+                        print('building Sequential model...')
+
+                        model = keras.Sequential()
+                        for i in layers:
+                            model.add(i)
+                    else:
+                        print('building Functional Model...')
+
+                        for i in range(len(layers)):
+                            if i != 0 :
+                                layers[i] = layers[i](layers[i-1])
+
+                        model = keras.Model(inputs=layers[0],outputs=layers[-1])
+                    
+                    sub = keras_model['compiler']
+                    optimizer = sub.optimizer.currentText()
+                    loss = None if sub.loss.currentText()== 'None' else sub.loss.currentText()
+                    metrics = None if sub.metrics == [] else sub.metrics
+                    stepsPerExec = sub.stepsPerExec.value()
+
+                    print('Compiling model...')
+                    model.compile(optimizer=optimizer,loss=loss,metrics=metrics,steps_per_execution=stepsPerExec)
+
+                    print('generating summary...\n')
+                    model.summary(print_fn=print)
+
+                    trainButton.setDisabled(False)
+
+                except:
+                    print(traceback.format_exc())
+                    traceback.print_exc()
+
+            thread = threading.Thread(target=keras_thread,daemon=True)
+            thread.start()
+
+            dialog.exec_()
+
+        except :
+            alertbox(traceback.format_exc())
+            
+
 
 
 ##############################################################################################################################################
@@ -157,14 +299,232 @@ def pyofficelearn(screen_width,screen_height):
 #                                                                              p:::::::p           
 #                                                                              p:::::::p           
 #                                                                              ppppppppp  
-    
+  
+#################### Custom Widgets ##################################################################################################################
+ 
+    class DraggableLabel(QLabel):
+        'A custom widget that support drag action'
+        def mousePressEvent(self, event):
+            if event.button() == Qt.LeftButton:
+                self.drag_start_position = event.pos()
+
+        def mouseMoveEvent(self, event):
+            if not (event.buttons() & Qt.LeftButton):
+                return
+            if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
+                return
+            drag = QDrag(self)
+            mimedata = QMimeData()
+            mimedata.setText(self.text())
+
+            drag.setMimeData(mimedata)
+            pixmap = QPixmap(self.size())
+            painter = QPainter(pixmap)
+            painter.drawPixmap(self.rect(), self.grab())
+            painter.end()
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(event.pos())
+            drag.exec_(Qt.CopyAction | Qt.MoveAction)
+
+
+    class DropAcceptWidget(QWidget):
+        'A custom Widget that support drop action'
+        def __init__(self,layout):
+            super().__init__()
+            self.setAcceptDrops(True)
+            self.setLayout(layout)
+            self.currentLayout = layout
+
+        def dragEnterEvent(self, event: QDragEnterEvent):
+            if event.mimeData().hasText():
+                event.accept()
+            else:
+                event.ignore()
+
+        def dropEvent(self, event: QDropEvent):
+            if event.mimeData().hasText():
+                text = event.mimeData().text()
+                
+                block = LayerBlockWidget(text)
+                if text == 'Sequential Model' and keras_model['sequential']==False:
+                    self.currentLayout.insertWidget(1,block)
+                    keras_model['sequential'] = True
+                elif text != 'Sequential Model':
+                    self.currentLayout.addWidget(block)
+                    keras_model['layers'].append(block)
+
+
+    class LayerBlockWidget(QLabel):
+        'A custom widget that represent a single keras layer'
+        def __init__(self,blockType:str):
+            super().__init__()
+            self.index = len(keras_model['layers'])
+            self.blockType = blockType
+
+            self.setFixedHeight(int(screen_height/8))
+            self.setStyleSheet('background-color:#303030;color:white;')
+            self.setAttribute(Qt.WA_DeleteOnClose)
+            self.layout = QGridLayout()
+            self.layout.setAlignment(Qt.AlignLeft)
+            self.setLayout(self.layout)
+
+            def deleteBlock():
+                if self.blockType != 'Sequential Model':
+                    keras_model['layers'].remove(self)
+                else:
+                    keras_model['sequential'] = False
+                self.close()
+                self.parentWidget().update()
+
+            blockLabel = QLabel(blockType)
+            blockLabel.setStyleSheet('font-size:30px;')
+            closeButton = QPushButton()
+            closeButton.setIcon(self.style().standardIcon(self.style().SP_DialogCloseButton))
+            closeButton.setFlat(True)
+            closeButton.clicked.connect(deleteBlock)
+            self.layout.addWidget(blockLabel,0,0,1,20)
+            self.layout.addWidget(closeButton,0,21,1,1)
+
+            if blockType == 'Sequential Model':
+                self.setFixedHeight(int(screen_height/16))
+
+            elif blockType == 'Input':
+                def change(index,num):
+                    self.shape[index] = num
+                self.shape = ()
+
+
+            elif blockType == 'Embedding Layer':
+                self.input_dim = QLineEdit()
+                self.input_dim.setValidator(QIntValidator())
+                self.input_dim.setMaximumWidth(int(screen_width/20))
+                self.output_dim = QLineEdit()
+                self.output_dim.setValidator(QIntValidator())
+                self.output_dim.setMaximumWidth(int(screen_width/20))
+                self.initializer = QComboBox()
+                self.initializer.addItems(['uniform'])
+                self.regularizer = QComboBox()
+                self.regularizer.addItems(['None'])
+                self.mask_zero = QCheckBox('mask_zero')
+                self.input_length = QLineEdit()
+                self.input_length.setValidator(QIntValidator())
+                self.input_length.setPlaceholderText('None')
+                self.input_length.setMaximumWidth(int(screen_width/20))
+                self.constraint = QComboBox()
+                self.constraint.addItems(['None'])
+
+                self.layout.addWidget(QLabel('input dim: '),1,0,1,1)
+                self.layout.addWidget(self.input_dim,1,1,1,1)
+                self.layout.addWidget(QLabel('output dim: '),1,2,1,1)
+                self.layout.addWidget(self.output_dim,1,3,1,1)
+                self.layout.addWidget(QLabel('  initializer: '),1,4,1,1)
+                self.layout.addWidget(self.initializer,1,5,1,1)
+                self.layout.addWidget(QLabel('  regularizer: '),1,6,1,1)
+                self.layout.addWidget(self.regularizer,1,7,1,1)
+                self.layout.addWidget(self.mask_zero,2,0,1,1)
+                self.layout.addWidget(QLabel('  input Length: '),2,2,1,1)
+                self.layout.addWidget(self.input_length,2,3,1,1)
+                self.layout.addWidget(QLabel('  constraint: '),2,4,1,1)
+                self.layout.addWidget(self.constraint,2,5,1,2)
+
+            elif blockType == 'Dropout Layer':
+                self.rate = QDoubleSpinBox()
+                self.rate.setRange(0.00,1.00)
+                self.rate.setSingleStep(0.01)
+                self.rate.setDecimals(2)
+                self.rate.setValue(0.20)
+                self.layout.addWidget(QLabel('rate: '),1,0,1,1)
+                self.layout.addWidget(self.rate,1,1,1,1)
+
+            elif blockType == 'Dense Layer':
+                self.units = QLineEdit()
+                self.units.setValidator(QIntValidator())
+                self.units.setMaximumWidth(int(screen_width/20))
+
+                self.layout.addWidget(QLabel('units: '),1,0,1,1)
+                self.layout.addWidget(self.units,1,1,1,1)
+
+        def check_submit(self): # check if every necessary field / arg is completed
+            return True
+
+    class ModelCompilerBlock(QLabel):
+        'A custom Widget that represent the Model.compile function'
+        def __init__(self):
+            super().__init__()
+            self.layout = QGridLayout()
+            self.layout.setAlignment(Qt.AlignLeft)
+
+            self.setLayout(self.layout)
+            self.setStyleSheet('background-color:#303030;color:white;')
+            
+            self.setFrameStyle(QFrame.StyledPanel)
+            self.setFrameShadow(QFrame.Sunken)
+            self.setFrameShape(QFrame.StyledPanel)
+            self.setFixedHeight(int(screen_height/6))
+
+            label = QLabel('compiler')
+            label.setStyleSheet('font-size:30px;')
+            self.optimizer = QComboBox()
+            self.optimizer.addItems(['adam','rsmprop','sgd','adadelta','adagrad','adamax','nadam','ftrl'])
+
+            self.loss = QComboBox()
+            self.loss.addItems(['None','mean_squared_error','mean_absolute_error','mean_absolute_percentage_error'
+            ,'mean_squared_logarithmic_error','cosine_similarity','huber','log_cosh','binary_crossentropy'
+            ,'categorical_crossentropy','sparse_categorical_crossentropy','poisson','kl_divergence','hinge'
+            ,'squared_hinge','categorical_hinge'])
+
+            
+            self.metricButton = QToolButton()
+            self.metricButton.setText('None')
+            self.metricButton.setPopupMode(QToolButton.InstantPopup)
+
+            metricsMenu = QMenu(self.metricButton)
+            self.metricButton.setMenu(metricsMenu)
+
+            self.metrics = []
+
+            def setMetrics(metric:str):
+                if metric not in self.metrics:
+                    self.metrics.append(metric)
+                else:
+                    self.metrics.remove(metric)
+                self.metricButton.setText(str(self.metrics).replace("'",''))
+                    
+            metric = ['Accuracy','BinaryAccuracy','CategoricalAccuracy','TopKCategoricalAccuracy'
+            ,'SparseTopKCategoricalAccuracy','BinaryCrossentropy','CategoricalCrossentropy'
+            ,'SparseCategoricalCrossentropy','KLDivergence','Poisson','MeanSquaredError'
+            ,'RootMeanSquaredError','MeanAbsoluteError','MeanAbsolutePercentageError'
+            ,'MeanSquaredLogarithmicError','CosineSimilarity','LogCoshError','AUC','Precision'
+            ,'Recall','TruePositives','TrueNegatives','FalsePositives','FalseNegatives'
+            ,'PrecisionAtRecall','SensitivityAtSpecificity','SpecificityAtSensitivity','MeanIoU'
+            ,'Hinge','SquaredHinge','CategoricalHinge']
+            for i in metric:
+                action = metricsMenu.addAction(i)
+                action.setCheckable(True)
+                exec(f"action.triggered.connect(lambda:setMetrics('{i}'))",locals())
+
+            self.stepsPerExec = QSpinBox()
+            self.stepsPerExec.setRange(1,10)
+
+            self.layout.addWidget(label,0,0,1,2)
+            self.layout.addWidget(QLabel('optimizer: '),1,0,1,1)
+            self.layout.addWidget(self.optimizer,1,1,1,1)
+            self.layout.addWidget(QLabel('   loss: '),1,2,1,1)
+            self.layout.addWidget(self.loss,1,3,1,1)
+            self.layout.addWidget(QLabel('   Metrics: '),1,4,1,1)
+            self.layout.addWidget(self.metricButton,1,5,1,1)
+            self.layout.addWidget(QLabel('Steps per execution: '),2,0,1,2)
+            self.layout.addWidget(self.stepsPerExec,2,2,1,1)
+
+#################################################################################################################################################################
+
     frameLayout = QVBoxLayout()
     frameLayout.setAlignment(Qt.AlignTop)
 
     icon_size = int(screen_height/18)
 
     mainLayout = QHBoxLayout()
-    ######################## menu bar ##############################################################
+    ######################## menu bar ###################################################################################################################
 
     bar = QToolBar()
     bar.setFixedHeight(int(screen_height/20))
@@ -237,14 +597,20 @@ def pyofficelearn(screen_width,screen_height):
 
     left_menu_mainlayout.addSpacing(int(screen_height/60))
 
-    EmbeddingLabel = QLabel('Embedding Layer')
-    EmbeddingLabel.setToolTip('Embedding layer: Categorical, text')
-    left_menu_mainlayout.addWidget(EmbeddingLabel)
+    layers = {'Sequential Model':'Sequential groups a linear stack of layers into a tf.keras.Model and provides training and inference features on this model.'
+    ,'Input':'Input is used to instantiate a Keras tensor.'
+    ,'Embedding Layer':'Embedding layer: Categorical, text'
+    ,'Dense Layer':'Dense layer: All scenario'
+    ,'Dropout Layer':'Dropout layer: prevent over fitting'
+    ,'LSTM Layer':'LSTM layer: text, time series'
+    ,'Activation Layer': 'Applies an activation function to an output.'
+    ,'Masking Layer': 'Masks a sequence by using a mask value to skip timesteps.'
+    }
 
-    DenseLabel = QLabel('Dense Layer')
-    DenseLabel.setToolTip('Dense layer: All scenario')
-    left_menu_mainlayout.addWidget(DenseLabel)
-
+    for x,y in layers.items():
+        label = DraggableLabel(x)
+        label.setToolTip(y)
+        left_menu_mainlayout.addWidget(label)
 
 
     mainLayout.addWidget(left_menu_widget)
@@ -267,27 +633,20 @@ def pyofficelearn(screen_width,screen_height):
 
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
-    areaWidget = QWidget()
+    vsb = scroll.verticalScrollBar()
+    vsb.rangeChanged.connect(lambda:vsb.setValue(vsb.maximum()))
+
+    areaLayout = QVBoxLayout()
+    areaLayout.setAlignment(Qt.AlignTop)
+
+    areaWidget = DropAcceptWidget(areaLayout)
 
     scroll.setWidget(areaWidget)
 
-    areaLayout = QVBoxLayout(areaWidget)
 
-    genesisblock  = QLabel('hello')
-    radius = 50.0
+    genesisblock  = ModelCompilerBlock()
+    keras_model['compiler'] = genesisblock
 
-    genesisblockLayout = QVBoxLayout()
-
-    genesisblock.setLayout(genesisblockLayout)
-    genesisblock.setStyleSheet('background-color:#303030;')
-    shadow = QGraphicsDropShadowEffect()
-    shadow.setBlurRadius(15)
-    
-    genesisblock.setFrameStyle(QFrame.StyledPanel)
-    genesisblock.setFrameShadow(QFrame.Sunken)
-    genesisblock.setFrameShape(QFrame.StyledPanel)
-    #genesisblock.setLineWidth(20)
-    genesisblock.setGraphicsEffect(shadow)
     areaLayout.addWidget(genesisblock)
 
     mainLayout.addWidget(scroll)
@@ -298,6 +657,10 @@ def pyofficelearn(screen_width,screen_height):
     right_menu_widget.setFixedWidth(int(screen_width/4))
     right_menu_layout = QGridLayout()
     right_menu_widget.setLayout(right_menu_layout)
+
+    BuildButton = QPushButton('Build Model')
+    BuildButton.clicked.connect(Build_and_run_keras)
+    right_menu_layout.addWidget(BuildButton)
     mainLayout.addWidget(right_menu_widget)
 
     return frameLayout
@@ -323,7 +686,7 @@ def pyofficelearn(screen_width,screen_height):
             
 def main():
     print('in construction')
-    global plt_setting, saved_file, current_file_name, settings, mainWidget, prjdict
+    global plt_setting, saved_file, current_file_name, settings, mainWidget, prjdict, keras_model
 
 ######################### handle sys argvs ###########################################################################################################
 
@@ -333,7 +696,6 @@ def main():
         print("""Usage: py-office-learn [<option>...]
 py-office-learn cross-platform spreadsheet based on keras and numpy for easy machine learning\n
 for more information, visit https://github.com/YC-Lammy/py-office-learn
-
         """)
         return 0
 
@@ -368,6 +730,7 @@ for more information, visit https://github.com/YC-Lammy/py-office-learn
     plt_setting = {'set':False}
     settings = {}
     prjdict = {}
+    keras_model = {'sequential':False,'layers':[],'compiler':None,'trainer':None,'input_shape':(1,)}
 
 
     def closeEventHandler(event): # this function is called when user tries to close app, line 559
@@ -408,5 +771,6 @@ for more information, visit https://github.com/YC-Lammy/py-office-learn
     
     gc.collect()
     sys.exit()
+
 if __name__ == '__main__':
     main()

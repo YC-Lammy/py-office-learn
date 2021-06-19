@@ -191,8 +191,6 @@ def pyofficelearn(screen_width,screen_height):
                 def print(string):
                     label.emitAppend(string) # emit signal to change text
 
-                sys.stdout.write = print
-
                 print('Importing Keras from tensorflow...')
 
                 from tensorflow import keras
@@ -229,7 +227,7 @@ def pyofficelearn(screen_width,screen_height):
 
                         if i.blockType == 'Input':
                             layers.append(keras.Input(shape=i.shape))
-                            
+
                     classLayers.remove(new_inputLayer)
 
                     if keras_model['sequential']:
@@ -269,6 +267,7 @@ def pyofficelearn(screen_width,screen_height):
             thread.start()
 
             dialog.exec_()
+
         except :
             alertbox(traceback.format_exc())
             
