@@ -1,7 +1,7 @@
 import gc, sys, joblib,os, traceback
 from logging import raiseExceptions
 import pyOfficeSheet
-from os import close
+from os import close, remove
 from typing import Any
 from time import sleep
 
@@ -215,8 +215,12 @@ def pyofficelearn(screen_width,screen_height):
                             def __init__(self):
                                 self.blockType = 'Input'
                                 self.shape = keras_model['input_shape']
+                                
                             def check_submit(self):
                                 return True
+
+                            def getArgs(self):
+                                return [self.shape]
                         
                         new_inputLayer = inputlayer()
                         classLayers.insert(0,new_inputLayer)
@@ -226,9 +230,25 @@ def pyofficelearn(screen_width,screen_height):
                     for i in classLayers:
 
                         if i.blockType == 'Input':
-                            layers.append(keras.Input(shape=i.shape))
+                            shape = i.getArgs()[0]
+                            layers.append(keras.Input(shape=shape))
 
-                    classLayers.remove(new_inputLayer)
+                        elif i.blockType == 'Embedding Layer':
+                            input_dim,output_dim,initializer,regularizers,mask,inputLength, constraints= i.getArgs()
+
+                            layers.append(keras.layers.Embedding(input_dim=input_dim
+                            ,output_dim=output_dim,embeddings_initializer=initializer
+                            ,embeddings_regularizer=regularizers,mask_zero=mask,input_length=inputLength
+                            ,embeddings_constraint=constraints))
+
+                        elif i.blockType == 'Dropout Layer':
+                            pass
+
+                        elif i.blockType == 'Dense Layer':
+                            pass
+                    
+                    if 'new_inputLayer' in locals():
+                        classLayers.remove(new_inputLayer)
 
                     if keras_model['sequential']:
                         print('building Sequential model...')
@@ -361,6 +381,11 @@ def pyofficelearn(screen_width,screen_height):
             self.index = len(keras_model['layers'])
             self.blockType = blockType
 
+            initializers = ['random_normal','random_uniform','truncated_normal','zeros','ones','glorot_normal','glorot_uniform','identity','orthogonal','constant','variance_scaling']
+            activations = ['None','relu','sigmoid','softmax','softplus','softsign','tanh','selu','elu','exponential']
+            regulars = ['None','l1','l2']
+            constraints = ['None','max_norm','min_max_norm','non_neg','unit_norm','radial_constraint']
+
             self.setFixedHeight(int(screen_height/8))
             self.setStyleSheet('background-color:#303030;color:white;')
             self.setAttribute(Qt.WA_DeleteOnClose)
@@ -389,29 +414,51 @@ def pyofficelearn(screen_width,screen_height):
                 self.setFixedHeight(int(screen_height/16))
 
             elif blockType == 'Input':
+
                 def change(index,num):
                     self.shape[index] = num
-                self.shape = ()
 
+                class customValidate(QValidator):
+                    def validate(self, arg__1: str, arg__2: int):
+                        print(arg__1)
+                        if arg__1.replace(',','').isnumeric()or arg__1 == '':
+                            return QValidator.Acceptable,arg__1, arg__2
+                        else:
+                            return QValidator.Invalid,arg__1,arg__2
+
+
+                self.shape = (0,0)
+
+                self.inputShape = QLineEdit()
+                self.inputShape.setPlaceholderText('shape of array e.g.(3,50,50)')
+                self.inputShape.setFixedWidth(int(screen_width/10))
+                self.inputShape.setValidator(customValidate())
+
+                self.layout.addWidget(QLabel('Input shape:('),1,0,1,1)
+                self.layout.addWidget(self.inputShape,1,1,1,2)
+                self.layout.addWidget(QLabel(')'+' '*200),1,3,1,6)
 
             elif blockType == 'Embedding Layer':
                 self.input_dim = QLineEdit()
                 self.input_dim.setValidator(QIntValidator())
                 self.input_dim.setMaximumWidth(int(screen_width/20))
+
                 self.output_dim = QLineEdit()
                 self.output_dim.setValidator(QIntValidator())
                 self.output_dim.setMaximumWidth(int(screen_width/20))
+
                 self.initializer = QComboBox()
-                self.initializer.addItems(['uniform'])
+                self.initializer.addItems(['uniform']+initializers)
+
                 self.regularizer = QComboBox()
-                self.regularizer.addItems(['None'])
+                self.regularizer.addItems(regulars)
                 self.mask_zero = QCheckBox('mask_zero')
                 self.input_length = QLineEdit()
                 self.input_length.setValidator(QIntValidator())
                 self.input_length.setPlaceholderText('None')
                 self.input_length.setMaximumWidth(int(screen_width/20))
                 self.constraint = QComboBox()
-                self.constraint.addItems(['None'])
+                self.constraint.addItems(constraints)
 
                 self.layout.addWidget(QLabel('input dim: '),1,0,1,1)
                 self.layout.addWidget(self.input_dim,1,1,1,1)
@@ -437,15 +484,105 @@ def pyofficelearn(screen_width,screen_height):
                 self.layout.addWidget(self.rate,1,1,1,1)
 
             elif blockType == 'Dense Layer':
+                self.setFixedHeight(int(screen_height/6))
                 self.units = QLineEdit()
                 self.units.setValidator(QIntValidator())
                 self.units.setMaximumWidth(int(screen_width/20))
 
+                self.activation = QComboBox()
+                self.activation.addItems(activations)
+
+                self.use_bias = QCheckBox('Use bias')
+                self.use_bias.setChecked(True)
+
+                self.kernel_initializer = QComboBox()
+                self.kernel_initializer.addItems(initializers)
+                self.kernel_initializer.setCurrentText("glorot_uniform")
+
+                self.bias_initializer = QComboBox()
+                self.bias_initializer.addItems(initializers)
+                self.bias_initializer.setCurrentText('zeros')
+
+                self.kernel_regularizer = QComboBox()
+                self.kernel_regularizer.addItems(regulars)
+
+                self.bias_regularizer = QComboBox()
+                self.bias_regularizer.addItems(regulars)
+
+                self.activity_regularizer = QComboBox()
+                self.activity_regularizer.addItems(regulars)
+
+                self.kernel_constraint = QComboBox()
+                self.kernel_constraint.addItems(constraints)
+
+                self.bias_constraint = QComboBox()
+                self.bias_constraint.addItems(constraints)
+
                 self.layout.addWidget(QLabel('units: '),1,0,1,1)
                 self.layout.addWidget(self.units,1,1,1,1)
+                self.layout.addWidget(QLabel('  activation: '),1,2,1,1)
+                self.layout.addWidget(self.activation,1,3,1,1)
+                self.layout.addWidget(self.use_bias,1,4,1,1)
+                self.layout.addWidget(QLabel('  kernel_init: '),1,5,1,1)
+                self.layout.addWidget(self.kernel_initializer,1,6,1,1)
+                self.layout.addWidget(QLabel('bias_init: '),1,7,1,1)
+                self.layout.addWidget(self.bias_initializer,1,8,1,1)
+                self.layout.addWidget(QLabel('regularizers :     kernel:'),2,0,1,2)
+                self.layout.addWidget(self.kernel_regularizer,2,2,1,1)
+                self.layout.addWidget(QLabel('    bias:'),2,3,1,1)
+                self.layout.addWidget(self.bias_regularizer,2,4,1,1)
+                self.layout.addWidget(QLabel('    activity:'),2,5,1,1)
+                self.layout.addWidget(self.activity_regularizer,2,6,1,1)
+                self.layout.addWidget(QLabel('Constraint:         kernel:'),3,0,1,2)
+                self.layout.addWidget(self.kernel_constraint,3,2,1,1)
+                self.layout.addWidget(QLabel('    bias:'),3,3,1,1)
+                self.layout.addWidget(self.bias_constraint,3,4,1,1)
+
+            elif blockType == 'Masking Layer':
+                self.setFixedHeight(int(screen_height/10))
+                self.mask_value= QDoubleSpinBox()
+                self.mask_value.setRange(0.0,1.0)
+                self.layout.addWidget(QLabel('mask_value: '),1,0,1,1)
+                self.layout.addWidget(self.mask_value,1,1,1,1)
+                self.layout.addWidget(QLabel(' '*200),1,2,1,6)
+
+            elif blockType == 'Activation Layer':
+                self.setFixedHeight(int(screen_height/10))
+                self.activation = QComboBox()
+                self.activation.addItems(activations[1:])
+
+                self.layout.addWidget(QLabel('Activation: '),1,0,1,1)
+                self.layout.addWidget(self.activation,1,1,1,1)
+                self.layout.addWidget(QLabel(' '*200),1,2,1,6)
+
+                
 
         def check_submit(self): # check if every necessary field / arg is completed
             return True
+
+        def getArgs(self):
+
+            if not self.check_submit:
+                raise Exception('not all arguments filled')
+
+            args = []
+            
+            if self.blockType == 'Input':
+                args.append((int(i) for i in self.inputShape.text().split(',')))
+
+            elif self.blockType == 'Embedding Layer':
+                args.append(int(self.input_dim.text()))
+                args.append(int(self.output_dim.text()))
+                args.append(self.initializer.currentText())
+                args.append(self.regularizer.currentText())
+                args.append(self.mask_zero.isChecked())
+                args.append(None if self.input_length.text()=='' else self.input_length.text())
+                args.append(self.constraint.currentText())
+
+            args = [None if i == 'None' else i for i in args]
+
+            return args
+            
 
     class ModelCompilerBlock(QLabel):
         'A custom Widget that represent the Model.compile function'
